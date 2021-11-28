@@ -1,0 +1,192 @@
+module graph_mod (clk, rst, x, y, key, key_pulse, rgb);
+
+input clk, rst;
+input [9:0] x, y;
+input [4:0] key, key_pulse; 
+output [2:0] rgb;
+
+// 화면 크기 설정
+parameter MAX_X = 640; 
+parameter MAX_Y = 480;  
+
+//refrernce tick // 매 프레임마다 한 clk 동안만 1이 됨. 
+wire refr_tick;
+assign refr_tick = (y==MAX_Y-1 && x==MAX_X-1)? 1 : 0; // 매 프레임마다 한 clk 동안만 1이 됨. 
+
+////////////////////////////////////////////////////////////////////////////////////////////
+/*                                        wall 설정                                       */
+////////////////////////////////////////////////////////////////////////////////////////////
+//wall 설정
+//wall들의 좌표 설정
+parameter WALL_1_X_L = 0; 
+parameter WALL_1_X_R = 6;
+
+parameter WALL_2_X_L = 634; 
+parameter WALL_2_X_R = 640;
+
+parameter WALL_3_Y_T = 0; 
+parameter WALL_3_Y_B = 6;
+parameter WALL_3_X_L = 6;
+parameter WALL_3_X_R = 634;
+
+parameter WALL_4_Y_T = 474; 
+parameter WALL_4_Y_B = 480;
+parameter WALL_4_X_L = 6; 
+parameter WALL_4_X_R = 634;
+
+parameter WALL_5_Y_T = 240; 
+parameter WALL_5_Y_B = 280;
+parameter WALL_5_X_L = 320; 
+parameter WALL_5_X_R = 400;
+
+wire wall_1_on, wall_2_on, wall_3_on, wall_4_on, wall_5_on;
+
+assign wall_1_on = (x>=WALL_1_X_L && x<=WALL_1_X_R)? 1 : 0; //wall이 있는 영역
+assign wall_2_on = (x>=WALL_2_X_L && x<=WALL_2_X_R)? 1 : 0; //wall이 있는 영역
+assign wall_3_on = (x>=WALL_3_X_L && x<=WALL_3_X_R && y<=WALL_3_Y_B && y>=WALL_3_Y_T)? 1 : 0; //wall이 있는 영역 
+assign wall_4_on = (x>=WALL_4_X_L && x<=WALL_4_X_R && y<=WALL_4_Y_B && y>=WALL_4_Y_T)? 1 : 0; //wall이 있는 영역 
+assign wall_5_on = (x>=WALL_5_X_L && x<=WALL_5_X_R && y<=WALL_5_Y_B && y>=WALL_5_Y_T)? 1 : 0; //wall이 있는 영역 
+
+////////////////////////////////////////////////////////////////////////////////////////////
+/*                                        ball 설정                                       */
+////////////////////////////////////////////////////////////////////////////////////////////
+//ball size 
+parameter BALL_SIZE = 10;
+
+//ball 그리기
+//ball 좌표
+wire [9:0] ball_x_l, ball_x_r, ball_y_t, ball_y_b;
+//ball 좌표 reg
+reg [9:0] ball_x_reg, ball_y_reg; 
+
+assign ball_x_l = ball_x_reg; //ball의 left
+assign ball_x_r = ball_x_reg + BALL_SIZE - 1; //ball의 right
+assign ball_y_t = ball_y_reg; //ball의 top
+assign ball_y_b = ball_y_reg + BALL_SIZE - 1; //ball의 bottom
+
+wire ball_1_on;
+assign ball_1_on = (x>=ball_x_l && x<=ball_x_r && y>=ball_y_t && y<=ball_y_b)? 1 : 0; //ball이 있는 영역
+
+//ball 속도
+parameter BALL_V = 6;
+//ball 속도 변화시키는 reg
+reg [9:0]  ball_vx_reg, ball_vy_reg;
+
+//ball 속도로 위치 제어
+always @ (posedge clk or posedge rst) begin
+    if(rst | game_stop) begin
+        ball_x_reg <= 9'd310; // game이 멈추면 여기서시작
+        ball_y_reg <= 9'd40; // game이 멈추면 여기서 시작
+    end else if (refr_tick) begin
+        ball_x_reg <= ball_x_reg + ball_vx_reg; //매 프레임마다 ball_vx_reg만큼 움직임
+        ball_y_reg <= ball_y_reg + ball_vy_reg; //매 프레임마다 ball_vy_reg만큼 움직임
+    end
+end
+
+//ball이 벽에 닿았는지 판정
+wire reach_wall_1, reach_wall_2, reach_wall_3, reach_wall_4;
+wire reach_wall_5_T,reach_wall_5_B, reach_wall_5_L, reach_wall_5_R;
+assign reach_wall_1 = (ball_x_l < 7)? 1 : 0; //ball 윗쪽 경계가 6보다 작으면  왼벽에 부딛힘
+assign reach_wall_2 = (ball_x_r > 633)? 1 : 0; //ball의 오른쪽 경계가 634보다 크면 오른벽에 부딛힘
+assign reach_wall_3 = (ball_y_t < 7)? 1 : 0; //ball 윗쪽 경계가 6보다 작으면 천장에 부딪힘
+assign reach_wall_4 = (ball_y_b > 473)? 1 : 0; //ball 윗쪽 경계가 6보다 작으면 바닥 부딛힘
+assign reach_wall_5_T = ((240 < ball_y_b) &&(ball_y_b < 250) && (ball_x_l >320) && (ball_x_r < 400))? 1 : 0;
+assign reach_wall_5_B = ((270 < ball_y_t) && (ball_y_t < 280) && (ball_x_l >320) && (ball_x_r < 400))? 1 : 0;
+assign reach_wall_5_L = ((ball_y_t < 280) && (ball_y_b > 240) && (320 < ball_x_r) && (ball_x_r < 330))? 1 : 0;
+assign reach_wall_5_R = ((ball_y_t < 280) && (ball_y_b > 240) && (390 < ball_x_l) && (ball_x_l < 400))? 1 : 0;
+ 
+//ball 속도 수정
+reg [4:0] ball_velocity_x_reg;
+reg [4:0] ball_velocity_y_reg;
+wire [4:0] ball_velocity_x;
+wire[4:0] ball_velocity_y;
+
+always @ (posedge clk or posedge rst) begin
+    if(rst | game_stop) begin
+      ball_velocity_x_reg <= 4'd6;
+      ball_velocity_y_reg <= 4'd6;
+    end 
+    else if (key[3:0] == 4'h6) begin
+      ball_velocity_x_reg <= 4'd6;
+      ball_velocity_y_reg <= 4'd6;
+    end else if (key[3:0] == 4'h4) begin
+      ball_velocity_x_reg <= 4'd4;
+      ball_velocity_y_reg <= 4'd4;
+    end else if (key[3:0] == 4'h2) begin
+        ball_velocity_x_reg <= 4'd2;
+        ball_velocity_y_reg <= 4'd2;
+    end else if (key[3:0] == 4'h0) begin
+          ball_velocity_x_reg <= 4'd0;
+          ball_velocity_y_reg <= 4'd0;
+    end
+end
+
+assign ball_velocity_x = ball_velocity_x_reg;
+assign ball_velocity_y = ball_velocity_y_reg;
+
+//ball 튕김
+always @ (posedge clk or posedge rst) begin
+    if(rst | game_stop) begin
+      ball_vx_reg <= -1*BALL_V; //game이 멈추면 왼쪽으로 
+      ball_vy_reg <= BALL_V; //game이 멈추면 아래로
+    end else if (reach_wall_1 | reach_wall_2 | reach_wall_3 | reach_wall_4) begin
+          if (reach_wall_1) ball_vx_reg <= BALL_V ; //왼벽에 부딪히면 아래로.
+          else if (reach_wall_2) ball_vx_reg <= -1*BALL_V ;//오른벽에 부딪히면 위로
+          else if (reach_wall_3) ball_vy_reg <= BALL_V ; //천장에 부딪히면 오른쪽으로 
+          else if (reach_wall_4) ball_vy_reg <= -1*BALL_V; //바닥에 튕기면 왼쪽으로
+          else if (reach_wall_5_L) ball_vx_reg <= -1 * BALL_V; //벽5 위쪽 부틷히면 아래로
+          else if (reach_wall_5_R) ball_vx_reg <= BALL_V; //벽5 위쪽 부틷히면 아래로
+          else if (reach_wall_5_T) ball_vy_reg <= -1*BALL_V; //벽5 위쪽 부틷히면 아래로
+          else if (reach_wall_5_B) ball_vy_reg <= BALL_V; //벽5 아래쪽 부틷히면 위로
+    end 
+end
+////////////////////////////////////////////////////////////////////////////////////////////
+/*                                           색칠                                         */
+////////////////////////////////////////////////////////////////////////////////////////////
+assign rgb =         //벽//
+              (wall_1_on) ? 3'b110 : //yellow wall1
+              (wall_2_on) ? 3'b110 : //yellow wall2
+              (wall_3_on) ? 3'b110 : //yellow wall3
+              (wall_4_on) ? 3'b110 : //yellow wall4
+              (wall_5_on) ? 3'b110 : //yellow wall5
+                       //공
+              (ball_1_on) ? 3'b100   : //red ball
+                      //배경
+              3'b010;                //green background
+              
+////////////////////////////////////////////////////////////////////////////////////////////
+/*                     \GAME Controller  (Finite state machine)                           */
+////////////////////////////////////////////////////////////////////////////////////////////
+parameter NEWGAME=2'b00, PLAY=2'b01, NEWBALL=2'b10, OVER=2'b11; 
+reg [1:0] state_reg, state_next;
+reg game_stop;
+
+always @ (key, state_reg) begin
+    game_stop = 1; 
+    case(state_reg) 
+        NEWGAME: begin //새 게임
+            if(key[4] == 1) begin //버튼이 눌리면
+            state_next = PLAY; //게임시작
+            end else begin
+                state_next = NEWGAME; //버튼이 안 눌리면 현재 상태 유지
+            end
+         end
+         PLAY: begin
+            game_stop = 0; //게임 Running
+                state_next = PLAY; //ball 놓치지 않으면 계속 진행
+        end
+        default: 
+            state_next = NEWGAME;
+    endcase
+end
+        
+always @ (posedge clk or posedge rst) begin
+    if(rst) begin
+        state_reg <= NEWGAME; 
+    end else begin
+        state_reg <= state_next; 
+    end
+end    
+        
+    
+endmodule
