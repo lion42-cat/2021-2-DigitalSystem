@@ -1,0 +1,22 @@
+module counter(
+    input clk,
+    input rst,
+    input en, 
+    output [6:0] o
+    );
+    
+    parameter result = 30;
+    reg [6:0] o;
+
+   always @(posedge clk or posedge rst)
+      if (rst)
+         o <= 7'b0;
+      else if (en) 
+         if (o == result) 
+         o <= 7'b0;
+         else 
+         o <= o + 1;
+
+
+endmodule
+
