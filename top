@@ -1,0 +1,92 @@
+module top(
+    input clk_100mhz,
+    input rst,
+    input [1:0] btn, 
+    inout [7:0] key_io,
+    output [3:0] red,
+    output [3:0] green,
+    output [3:0] blue,
+    output vsync,
+    output hsync    ,  //ㅊㅊㅊㅊ추가
+    output [7:0] seg_data, 
+    output [5:0] seg_com
+    );
+wire clk_25mhz, clk_1khz;  
+wire [9:0] x, y; 
+wire [11:0] rgb;
+wire video_on; 
+wire [4:0] key_tmp, key, key_pulse;
+
+wire [6:0] time_count; 
+
+reg [4:0] show[0:5];
+
+reg [5:0] seg_com;
+reg [7:0] seg_data;
+
+wire [6:0] dec_out[0:5]; 
+/////////////////////////////////
+clk_wiz_0 clk_inst (clk_25mhz, rst, , clk_100mhz);
+//fnd
+clk_divider #(.DIVISOR(6000)) clk_div_inst (clk_25mhz, clk_1khz);
+
+//keypad
+keypad #(.CLK_KHZ(25175)) keypad_inst (clk_25mhz, rst, key_io[7:4], key_io[3:0], key_tmp); 
+debounce #(.SIZE(16), .BTN_WIDTH(5)) debounce_inst (clk_25mhz, rst, key_tmp, key, key_pulse); 
+
+assign red = (video_on==1)? rgb[11:8] : 0;  
+assign green= (video_on==1)? rgb[7:4] : 0;
+assign blue = (video_on==1)? rgb[3:0] : 0;
+
+
+// drawing module
+graph_mod graph_inst(clk_25mhz, rst, x, y, key, key_pulse, rgb, time_count);
+
+// sync module
+sync_mod sync_inst (rst, clk_25mhz, x, y, video_on, vsync, hsync); 
+
+//FND
+    always @ (posedge clk_25mhz, posedge rst)
+    begin
+        if (rst == 1) begin
+        show[0] <= 5'd31; 
+        show[1] <= 5'd31;
+        show[2] <= 5'd31;
+        show[3] <= 5'd31;
+        show[4] <= 5'd31;
+        show[5] <= 5'd31;
+        end
+        else begin
+        show[0] <= time_count%10;
+        show[1] <= (time_count/10)%10;
+         end
+     end
+
+    //keyboard 입력 debounce
+    dec7 dec7_inst_0 (show[0], dec_out[0]); 
+    dec7 dec7_inst_1 (show[1], dec_out[1]);
+    dec7 dec7_inst_2 (show[2], dec_out[2]);
+    dec7 dec7_inst_3 (show[3], dec_out[3]);
+    dec7 dec7_inst_4 (show[4], dec_out[4]);
+    dec7 dec7_inst_5 (show[5], dec_out[5]);
+    
+    always @ (posedge clk_1khz, posedge rst)
+        begin  
+            if (rst == 1)
+                seg_com <= 6'b100000; 
+            else
+                seg_com <= {seg_com[0], seg_com[5:1]};
+        end
+
+        always @* begin
+            case (seg_com)
+                6'b100000 : seg_data = {dec_out[0], 1'b0};          
+                6'b010000 : seg_data = {dec_out[1], 1'b0};
+                6'b001000 : seg_data = {dec_out[2], 1'b0};
+                6'b000100 : seg_data = {dec_out[3], 1'b0};
+                6'b000010 : seg_data = {dec_out[4], 1'b0};
+                6'b000001 : seg_data = {dec_out[5], 1'b0};
+                default: seg_data = 8'b0;       
+            endcase
+        end
+endmodule
